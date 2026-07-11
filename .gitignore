@@ -1,0 +1,32 @@
+build/
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.list
+
+# STM32CubeIDE 
+.metadata/
+.settings/
+*.launch
+RTE/
+
+# STM32CubeMX
+*.ioc.bak
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+*.swp
+*~
+
+# Logs
+*.log
