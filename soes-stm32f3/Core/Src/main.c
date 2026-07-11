@@ -107,10 +107,7 @@ void Error_Handler(void)
  */
 void cb_get_inputs()
 {
-    static uint8_t counter = 0;
-    counter++;
-    Obj.debug_buffer[0] = counter;     // Should show up at index 0 in the print
-	Obj.debug_buffer[1] = 0xAA;
+	Obj.debug_buffer[0] = Obj.rtd_filter + 10;
 }
 /**
  * Write physical output values from the corresponding members of
@@ -120,7 +117,13 @@ void cb_get_inputs()
 void cb_set_outputs()
 {
 	/* test some values */
-	Obj.rtd_filter++;
+	uint8_t master_cmd = Obj.rtd_filter;
+
+	    // Perform an action based on the command
+	    // Example: Map it to a specific behavior
+	    if (master_cmd == 0xAA) {
+	        // Trigger a "Special State"
+	    }
 }
 
 

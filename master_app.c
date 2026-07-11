@@ -25,9 +25,6 @@ int main() {
     ec_slave_config_t *sc = ecrt_master_slave_config(master, 0, 0, VENDOR_ID, PRODUCT_CODE);
     if (!sc) return -1;
 
-    // Load configuration from EEPROM
-    //if (ecrt_slave_config_pdos(sc, EC_END, NULL)) return -1;
-
     // Register entries
     ec_pdo_entry_reg_t domain_regs[] = {
         {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0005, 0x01, &off_rx_byte0}, // RxPDO: outputs to slave
@@ -42,26 +39,25 @@ int main() {
 
     printf("EtherCAT Master Active. Starting control loop...\n");
 
-    unsigned int counter = 0;
+    uint32_t counter = 0;
+    static uint8_t master_send_val = 0;
+
     while (1) {
         ecrt_master_receive(master);
         ecrt_domain_process(domain1);
 
         // --- DATA EXCHANGE AREA ---
 
-        // Write: Send an incrementing counter to the slave's output buffer (SM0 @ 0x1000)
-        uint8_t out_val = (uint8_t)(counter % 255);
-        domain1_pd[off_rx_byte0] = out_val;
+        // Write the value to the Output buffer
+        master_send_val++; 
+        domain1_pd[off_rx_byte0] = master_send_val;
 
         // Read: Print every 1000 cycles (~1 second)
         if (counter % 1000 == 0) {
-            // Read 4 bytes from the slave's input buffer (SM1 @ 0x1200)
-            uint32_t input_data = *(uint32_t *)(domain1_pd + off_tx_byte0);
-            // Inside your main loop, replace the current print with this:
-            printf("[cycle %d] Sent (Byte0): 0x%02X | Received Buffer: ", 
-                    counter, domain1_pd[off_tx_byte0]);
+            printf("[cycle %u] Sent: 0x%02X | Received Buffer: ", 
+                    counter, domain1_pd[off_rx_byte0]);
 
-            // Print the first 8 bytes of the domain buffer to see where data is appearing
+            // Print the first 8 bytes of the domain buffer
             for (int i = 0; i < 8; i++) {
                 printf("%02X ", domain1_pd[i]);
             }
