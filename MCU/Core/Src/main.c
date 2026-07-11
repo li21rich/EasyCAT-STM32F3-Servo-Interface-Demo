@@ -109,11 +109,17 @@ int main(void)
   /* Infinite loop */
   while (1)
   {
-    uint32_t rx_buffer = ECAT_ReadReg(0x1000, 4);
-    char msg[64];
-    sprintf(msg, "Received Outputs: 0x%08lX\r\n", rx_buffer);
+    /*
+    uint32_t rx_buffer = 0;
+    rx_buffer = ECAT_ReadReg(0x0020, 4);
+    if (rx_buffer != 0) {
+        char msg[32];
+        sprintf(msg, "Received: 0x%08lX\r\n", rx_buffer);
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
+    }*/
+    char msg[] = "Alive\r\n";
     HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
-    HAL_Delay(500);
+    HAL_Delay(2500);
   }
   /* USER CODE END 3 */
 }
