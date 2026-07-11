@@ -31,7 +31,7 @@ int main() {
     // Register entries
     ec_pdo_entry_reg_t domain_regs[] = {
         {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0005, 0x01, &off_rx_byte0},
-        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0005, 0x01, &off_tx_byte0},
+        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0006, 0x01, &off_tx_byte0},
         {}
     };
 
