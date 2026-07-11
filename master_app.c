@@ -26,12 +26,12 @@ int main() {
     if (!sc) return -1;
 
     // Load configuration from EEPROM
-    if (ecrt_slave_config_pdos(sc, EC_END, NULL)) return -1;
+    //if (ecrt_slave_config_pdos(sc, EC_END, NULL)) return -1;
 
     // Register entries
     ec_pdo_entry_reg_t domain_regs[] = {
-        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0005, 0x01, &off_rx_byte0},
-        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0006, 0x01, &off_tx_byte0},
+        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0005, 0x01, &off_rx_byte0}, // RxPDO: outputs to slave
+        {0, 0, VENDOR_ID, PRODUCT_CODE, 0x0006, 0x01, &off_tx_byte0}, // TxPDO: inputs from slave
         {}
     };
 
@@ -48,17 +48,26 @@ int main() {
         ecrt_domain_process(domain1);
 
         // --- DATA EXCHANGE AREA ---
-        
-        // Write: Put an incrementing value into the first output byte
-        domain1_pd[off_rx_byte0] = (uint8_t)(counter % 255);
 
-        // Read: Print incoming data every 1000 cycles (1 second)
-         if (counter % 1000 == 0) {
-        // Read 4 bytes starting from the input offset
-        uint32_t *input_data = (uint32_t *)(domain1_pd + off_tx_byte0);
-        printf("Input Data (First 4 bytes): 0x%08X\n", *input_data);
-    }
-        
+        // Write: Send an incrementing counter to the slave's output buffer (SM0 @ 0x1000)
+        uint8_t out_val = (uint8_t)(counter % 255);
+        domain1_pd[off_rx_byte0] = out_val;
+
+        // Read: Print every 1000 cycles (~1 second)
+        if (counter % 1000 == 0) {
+            // Read 4 bytes from the slave's input buffer (SM1 @ 0x1200)
+            uint32_t input_data = *(uint32_t *)(domain1_pd + off_tx_byte0);
+            // Inside your main loop, replace the current print with this:
+            printf("[cycle %d] Sent (Byte0): 0x%02X | Received Buffer: ", 
+                    counter, domain1_pd[off_tx_byte0]);
+
+            // Print the first 8 bytes of the domain buffer to see where data is appearing
+            for (int i = 0; i < 8; i++) {
+                printf("%02X ", domain1_pd[i]);
+            }
+            printf("\n");
+        }
+
         counter++;
         // --------------------------
 
