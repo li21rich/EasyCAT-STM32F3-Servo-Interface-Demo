@@ -95,17 +95,17 @@ The `EasyCAT.xml` file in the root is an **ESI (EtherCAT Slave Information) file
 ## Project Structure
 
 ```
-├── master_app.c              # IgH master app (runs on Linux) — all the master logic
-├── master_app                # Pre-compiled binary
+├── master_app.c              # IgH master app (runs on Linux) — all the master ethercat logic
+├── master_app                # Pre-compiled binary — run this WHEN READY.
 ├── EasyCAT.xml               # ESI file (optional — documentation only)
 ├── soes-stm32f3/
 │   ├── Core/Src/main.c       # Slave firmware entry — PWM servo control
 │   ├── lib/soes/             # SOES EtherCAT slave stack (C library)
 │   ├── lib/soes-esi/
-│   │   ├── objectlist.c      # CANopen object dictionary (C code)
+│   │   ├── objectlist.c      # CANopen object dictionary 
 │   │   └── utypes.h          # Custom data types for the OD
 │   └── twincat/              # TwinCAT project files (optional)
-└── pdserv.sh                 # (optional) PDO monitoring script
+└── pdserv.sh                 # PDO monitoring script (optional — decoration only, not integrated) 
 ```
 
 ## Troubleshooting
