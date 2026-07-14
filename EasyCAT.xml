@@ -2,7 +2,7 @@
 <EtherCATInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="EtherCATInfo.xsd" Version="1.6">
 <!-- ***************** EasyCAT V 1.0 ********************************************************** --> 
 	<Vendor>
-		<Id>#x0000079A</Id> 
+		<Id>#x0000079A</Id>
 	  	<Name>AB&amp;T</Name>  
 	    <ImageData16x14>424dd6020000000000003600000028000000100000000e0000000100180000000000a0020000c40e0000c40e000000000000000000004cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb1224cb122ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff241cedffffff241cedffffff241ced241cedffffffffffffffffff241ced241ced241cedffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffffffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffffffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffffffffff241cedffffffffffffffffff241cedffffffffffff241ced241ced241cedffffff241ced241cedffffffffffff241cedffffff241cedffffffffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffff241cedffffffffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffffffffff241cedffffffffffffffffff241cedffffffffffff241cedffffff241cedffffff241cedffffff241cedffffffffffffffffffffffffffffffffffff241cedffffffffffffffffff241cedffffffffffffffffff241cedffffffffffffffffffffffffffffffffffff241ced241ced241cedffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</ImageData16x14>
 	</Vendor> 
@@ -16,7 +16,7 @@
     </Groups>
     <Devices>
       <Device Physics="YY">
-        <Type ProductCode="#x00DEFEDE" RevisionNo="#x00005A00">EasyCAT 32+32</Type>
+        <Type ProductCode="#x00000001" RevisionNo="#xx00DEFEDE">EasyCAT 32+32</Type> <!--prod code was <xx00DEFEDE-->
         <Name LcId="1033"><![CDATA[Generic 32+32 bytes]]></Name>        
         <URL LcId="1033"><![CDATA[http://www.bausano.net/]]></URL>	
         <GroupType>SSC_Device</GroupType>

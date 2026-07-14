@@ -13,6 +13,8 @@
 /* CANopen Object Dictionary */
 _Objects Obj;
 
+TIM_HandleTypeDef htim2; // Timer for servo PWM
+
 /**
  * SOES configuration.
  * TODO: implement task specific function and specify
@@ -86,6 +88,31 @@ static void SystemClock_Config(void)
 
 static void MX_GPIO_Init(void)
 {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    /* GPIO Ports Clock Enable */
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    /* Configure PA0 as Alternate Function for TIM2_CH1 (servo PWM) */
+    GPIO_InitStruct.Pin = GPIO_PIN_0;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF1_TIM2; // TIM2_CH1 on PA0
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+/**
+ * @brief TIM2 HAL MSP Initialization
+ *        This function is called from HAL_TIM_PWM_Init() and handles
+ *        the low-level peripheral clock enable.
+ */
+void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2) {
+        /* Enable TIM2 clock */
+        __HAL_RCC_TIM2_CLK_ENABLE();
+    }
 }
 
 void Error_Handler(void)
@@ -100,30 +127,73 @@ void Error_Handler(void)
  * Public functions
  ****************************************************************/
 /**
+ * Initialize TIM2 for 50Hz servo PWM on channel 1 (PA0).
+ * With HSI = 8MHz, prescaler 79 gives 100kHz timer clock.
+ * Period 19999 gives 5Hz (200ms) - wait, that's wrong for 50Hz.
+ * Actually: 8MHz / (79+1) = 100kHz. Period 1999 gives 50Hz (20ms).
+ */
+void MX_TIM2_PWM_Init(void) {
+    TIM_OC_InitTypeDef sConfigOC = {0};
+
+    htim2.Instance = TIM2;
+    htim2.Init.Prescaler = 79;              // 8MHz / (79+1) = 100kHz
+    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim2.Init.Period = 1999;               // 100kHz / (1999+1) = 50Hz
+    htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+
+    if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
+        Error_Handler();
+    }
+
+    sConfigOC.OCMode = TIM_OCMODE_PWM1;
+    sConfigOC.Pulse = 150;                  // 1.5ms pulse = center (150 * 10us)
+    sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+    sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+
+    if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+
+    if (HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+/**
  * Read physical input values and assigns the corresponding members
  * in the CANopen object dictionary so that the slave can send that
  * info back to the master with TXPDO or SDO.
- * TODO: implement it according to application requirements.
  */
 void cb_get_inputs()
 {
 	Obj.debug_buffer[0] = Obj.rtd_filter + 10;
 }
+
 /**
  * Write physical output values from the corresponding members of
  * the CANopen object dictionary (i.e. set DO, PWM, ...).
- * TODO: implement it according to application requirements.
+ * Here we read led[0].state (which receives the first output byte
+ * from the master via the PDO mapping) and convert it to a servo
+ * PWM pulse width.
  */
 void cb_set_outputs()
 {
-	/* test some values */
-	uint8_t master_cmd = Obj.rtd_filter;
+	/* Read the servo angle sent by the master (0-180 degrees) */
+	uint8_t servo_angle = Obj.led[0].state;
 
-	    // Perform an action based on the command
-	    // Example: Map it to a specific behavior
-	    if (master_cmd == 0xAA) {
-	        // Trigger a "Special State"
-	    }
+	/* Clamp to safe range */
+	if (servo_angle > 180) servo_angle = 180;
+
+	/* Convert angle (0-180) to pulse width (500-2500 us)
+	 * Timer runs at 100kHz → 1 tick = 10 us
+	 * 500us  = 50 ticks  (0 deg)
+	 * 1500us = 150 ticks (90 deg)
+	 * 2500us = 250 ticks (180 deg)
+	 */
+	uint32_t pulse = 50 + (servo_angle * 200 / 180);
+
+	/* Update the PWM compare register */
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, pulse);
 }
 
 
@@ -143,6 +213,8 @@ int main(void)
 
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
+
+	MX_TIM2_PWM_Init(); // Initialize PWM for servo
 
 	/* initialize EtherCAT slave */
 	ecat_slv_init(&config);
