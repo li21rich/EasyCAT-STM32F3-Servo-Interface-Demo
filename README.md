@@ -80,17 +80,29 @@ The app starts a control loop at ≈1 kHz that sweeps a servo angle (0° → 180
 | Servo power       | External 6V PSU                 |
 | Servo ground      | Common GND with Nucleo          |
 
+## How It Works
+There is no XML parsing. For this demo, all is hardcoded in C, as industrial software like TwinCAT were not integrated:
+
+| Layer | File | Role |
+|-------|------|------|
+| **Linux master** | `master_app.c` | IgH `ecrt.h` API — requests master, registers PDO entries by vendor/product code, runs 1 kHz control loop |
+| **Slave stack** | `lib/soes/` | SOES (Simple Open EtherCAT Slave) — handles ESC communication, CoE, PDO mapping on the STM32 |
+| **Object dictionary** | `objectlist.c` + `utypes.h` | Defines the CANopen object dictionary entries and their memory layout — this is where the servo angle byte is mapped to `led[0].state` |
+| **Firmware logic** | `Core/Src/main.c` | `cb_set_outputs()` reads the received angle and drives TIM2 PWM on PA0 |
+
+The `EasyCAT.xml` file in the root is an **ESI (EtherCAT Slave Information) file** — purely documentation. It describes the same PDO mapping in a standard XML format for use with other EtherCAT masters (e.g. Beckhoff TwinCAT). Neither IgH nor SOES reads it at runtime.
+
 ## Project Structure
 
 ```
-├── master_app.c              # IgH master app (runs on Linux)
+├── master_app.c              # IgH master app (runs on Linux) — all the master logic
 ├── master_app                # Pre-compiled binary
-├── EasyCAT.xml               # ESI file for the slave
+├── EasyCAT.xml               # ESI file (optional — documentation only)
 ├── soes-stm32f3/
-│   ├── Core/Src/main.c       # Slave firmware entry
-│   ├── lib/soes/             # SOES EtherCAT slave stack
+│   ├── Core/Src/main.c       # Slave firmware entry — PWM servo control
+│   ├── lib/soes/             # SOES EtherCAT slave stack (C library)
 │   ├── lib/soes-esi/
-│   │   ├── objectlist.c      # CANopen object dictionary
+│   │   ├── objectlist.c      # CANopen object dictionary (C code)
 │   │   └── utypes.h          # Custom data types for the OD
 │   └── twincat/              # TwinCAT project files (optional)
 └── pdserv.sh                 # (optional) PDO monitoring script
