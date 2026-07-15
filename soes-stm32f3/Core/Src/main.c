@@ -6,7 +6,6 @@
 #include "ecat_slv.h"
 #include "utypes.h"
 
-
 /****************************************************************
  * Data
  ****************************************************************/
@@ -28,7 +27,7 @@ static esc_cfg_t config =
     .set_defaults_hook = NULL,
     .pre_state_change_hook = NULL,
     .post_state_change_hook = NULL,
-    .application_hook = NULL,
+    .application_hook = cb_set_outputs,
     .safeoutput_override = NULL,
     .pre_object_download_hook = NULL,
     .post_object_download_hook = NULL,
@@ -183,7 +182,6 @@ void cb_set_outputs()
 
 	/* Clamp to safe range */
 	if (servo_angle > 180) servo_angle = 180;
-
 	/* Convert angle (0-180) to pulse width (500-2500 us)
 	 * Timer runs at 100kHz → 1 tick = 10 us
 	 * 500us  = 50 ticks  (0 deg)
@@ -216,9 +214,12 @@ int main(void)
 
 	MX_TIM2_PWM_Init(); // Initialize PWM for servo
 
+	/* Test: set servo to ~170° position before EtherCAT starts */
+	/* 170° → pulse = 50 + (170 * 200 / 180) = 50 + 188 = 238 ticks (2.38ms) */
+	//__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 238);
+
 	/* initialize EtherCAT slave */
 	ecat_slv_init(&config);
-
 	while (1)
 	{
 		/* run slave logic (polling mode) */
