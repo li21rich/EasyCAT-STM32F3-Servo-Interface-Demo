@@ -87,6 +87,13 @@ typedef struct
     struct power_t power_24V[EC_NUM_POWER_SUPPLY_24V]; //24V power supply
     struct power_t power_20V[EC_NUM_POWER_SUPPLY_20V]; //20V power supply
     struct power_t power_5V[EC_NUM_POWER_SUPPLY_5V]; //5V power supply
+    uint8_t echo_byte; // TxPDO echo: mirrors Obj.led[0].state for master verification
+    /* Padding to make the Rx/Tx PDO objects (0x0005 / 0x0006) span the full
+     * 32 bytes declared by the off-the-shelf EasyCAT EEPROM. The slave's
+     * computed PDO size MUST equal the master's SM2/SM3 length (32) or
+     * ESC_checkSM23() disables process data. Only subindex 1 is used. */
+    uint8_t pdo_rx_pad[31]; // pad 0x0005:09..20 (subindex 9..32)
+    uint8_t pdo_tx_pad[31]; // pad 0x0006:02..20 (subindex 2..32)
     /** standard data */
     uint8_t Error_register;
     struct

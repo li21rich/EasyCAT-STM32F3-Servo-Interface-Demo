@@ -124,6 +124,15 @@ When unplugging the EasyCAT, first safely eject the virtual USB drive and stop t
 sudo systemctl stop ethercat
 ```
 
+## Other Useful Commands:
+```
+gcc -o master_app master_app.c -lethercat
+ethercat debug 1
+ethercat domains 
+dmesg -T | grep EtherCAT | tail -n 250 
+
+```
+
 ## License
 
 See the individual subprojects for their respective licenses (IgH GPL, SOES BSD, STM HAL BSD-3).

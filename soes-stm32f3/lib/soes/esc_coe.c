@@ -153,7 +153,7 @@ uint16_t sizeOfPDO (uint16_t index, int * nmappings, _SMmap * mappings,
 
             for (c = 1; c <= maxsub; c++)
             {
-               uint32_t value = OBJ_VALUE_FETCH (value, objd[c]);
+               uint32_t value = objd[c].value;
                uint8_t bitlength = value & 0xFF;
 
                if (max_mappings > 0)

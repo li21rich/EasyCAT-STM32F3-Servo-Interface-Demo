@@ -102,8 +102,13 @@ typedef struct
 #define ATYPE_RW                (ATYPE_RO | ATYPE_WO)
 #define ATYPE_RWpre             (ATYPE_Wpre | ATYPE_RO)
 
-#define TX_PDO_OBJIDX           0x1c13
-#define RX_PDO_OBJIDX           0x1c12
+/* These must point at the PDO MAPPING objects (0x1A00 Tx / 0x1600 Rx),
+ * NOT the Sync-Manager PDO-assignment objects (0x1C13 / 0x1C12).
+ * sizeOfPDO() reads the (index:subindex:bits) mapping entries from these
+ * objects; pointing them at 0x1C12/0x1C13 made sizeOfPDO() return 0,
+ * which zeroed ESC_SM2_sml/ESC_SM3_sml and silently disabled all PDO data. */
+#define TX_PDO_OBJIDX           0x1a00
+#define RX_PDO_OBJIDX           0x1600
 
 #define COMPLETE_ACCESS_FLAG    (1 << 15)
 

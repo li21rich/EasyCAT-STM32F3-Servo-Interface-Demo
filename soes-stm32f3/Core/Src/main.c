@@ -13,11 +13,54 @@
 _Objects Obj;
 
 TIM_HandleTypeDef htim2; // Timer for servo PWM
+TIM_HandleTypeDef htim3;
+
+volatile uint8_t target_angle = 142;
+volatile float current_angle = 0.0f;
+
+/**
+ * Forward declaration of RXPDO_update() from ecat_slv.c.
+ * We call this unconditionally to ensure PDO data is always
+ * read from the ESC SM2 memory, regardless of ALevent state
+ * (the LAN9252 CSR reads can consume ALevent bits before
+ * DIG_process checks them).
+ */
+extern void RXPDO_update(void);
+extern void TXPDO_update(void);
+
+/**
+ * Application hook: runs every ecat_slv() cycle.
+ * Forces PDO read then sets outputs.
+ */
+static void app_hook(void)
+{
+    /* Unconditionally read SM2 process data from ESC into object dictionary.
+     * This bypasses the ALevent-based SM2 detection in DIG_process,
+     * which can miss events on LAN9252 due to CSR ALevent register reads
+     * clearing bits before DIG_process checks them.
+     */
+    RXPDO_update();
+
+    /* Now read the fresh value from object dictionary */
+    target_angle = Obj.led[0].state;
+    if (target_angle > 180) target_angle = 180;
+    Obj.debug_buffer[0] = target_angle;
+
+    /* Echo the received Rx value back so the master can verify the
+     * round-trip over the TxPDO. */
+    Obj.echo_byte = Obj.led[0].state;
+
+    /* Unconditionally pack SM3 process data from object dictionary into the ESC.
+     * This bypasses the App.state gate in DIG_process()'s input section, which
+     * can leave TXPDO_update() skipped (echo stays 0) if the internal
+     * APPSTATE_INPUT flag is not set. Mirrors the RXPDO_update() call above. */
+    TXPDO_update();
+}
 
 /**
  * SOES configuration.
  * TODO: implement task specific function and specify
- * 		 here the address if needed.
+ *        here the address if needed.
  */
 static esc_cfg_t config =
 {
@@ -27,7 +70,7 @@ static esc_cfg_t config =
     .set_defaults_hook = NULL,
     .pre_state_change_hook = NULL,
     .post_state_change_hook = NULL,
-    .application_hook = cb_set_outputs,
+    .application_hook = app_hook,
     .safeoutput_override = NULL,
     .pre_object_download_hook = NULL,
     .post_object_download_hook = NULL,
@@ -120,8 +163,18 @@ void Error_Handler(void)
 	__disable_irq();
 	while (1){}
 }
+// In main.c, outside the loop
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM3) {
+        // Slew rate control
+        if (current_angle < target_angle) current_angle += 1.0f;
+        else if (current_angle > target_angle) current_angle -= 1.0f;
 
-
+        uint32_t pulse = 50 + (((uint32_t)current_angle) * 200 / 180);
+        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, pulse);
+    }
+}
 /****************************************************************
  * Public functions
  ****************************************************************/
@@ -145,7 +198,7 @@ void MX_TIM2_PWM_Init(void) {
     }
 
     sConfigOC.OCMode = TIM_OCMODE_PWM1;
-    sConfigOC.Pulse = 150;                  // 1.5ms pulse = center (150 * 10us)
+    sConfigOC.Pulse = 0;
     sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
     sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 
@@ -157,7 +210,21 @@ void MX_TIM2_PWM_Init(void) {
         Error_Handler();
     }
 }
+void MX_TIM3_100Hz_Init(void) {
+    __HAL_RCC_TIM3_CLK_ENABLE();
 
+    // Use the global htim3 handle
+    htim3.Instance = TIM3;
+    htim3.Init.Prescaler = 79;
+    htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim3.Init.Period = 999;
+    HAL_TIM_Base_Init(&htim3);
+
+    HAL_NVIC_SetPriority(TIM3_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM3_IRQn);
+
+    HAL_TIM_Base_Start_IT(&htim3);
+}
 /**
  * Read physical input values and assigns the corresponding members
  * in the CANopen object dictionary so that the slave can send that
@@ -174,55 +241,56 @@ void cb_get_inputs()
  * Here we read led[0].state (which receives the first output byte
  * from the master via the PDO mapping) and convert it to a servo
  * PWM pulse width.
+ *
+ * NOTE: This function is called from DIG_process() inside the
+ * output section when SM2 event is detected. The application_hook
+ * (app_hook) calls RXPDO_update() unconditionally and then does
+ * this same work, so this function may not be called if SM2
+ * events are missed -- the app_hook handles that case.
  */
 void cb_set_outputs()
 {
-	/* Read the servo angle sent by the master (0-180 degrees) */
-	uint8_t servo_angle = Obj.led[0].state;
-
-	/* Clamp to safe range */
-	if (servo_angle > 180) servo_angle = 180;
-	/* Convert angle (0-180) to pulse width (500-2500 us)
-	 * Timer runs at 100kHz → 1 tick = 10 us
-	 * 500us  = 50 ticks  (0 deg)
-	 * 1500us = 150 ticks (90 deg)
-	 * 2500us = 250 ticks (180 deg)
-	 */
-	uint32_t pulse = 50 + (servo_angle * 200 / 180);
-
-	/* Update the PWM compare register */
-	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, pulse);
+    /* Capture target angle immediately upon network receipt */
+    target_angle = Obj.led[0].state;
+    if (target_angle > 180) target_angle = 180;
+    Obj.debug_buffer[0] = target_angle;
 }
+void update_servo_smoothly(void)
+{
+    static uint32_t last_tick = 0;
 
+    // Update every 10ms (100Hz)
+    if (HAL_GetTick() - last_tick >= 10)
+    {
+        last_tick = HAL_GetTick();
 
+        // Slew rate control (adjust step size for speed)
+        if (current_angle < target_angle) current_angle += 1.0f;
+        else if (current_angle > target_angle) current_angle -= 1.0f;
+
+        // Apply smooth pulse
+        uint32_t pulse = 50 + (((uint32_t)current_angle) * 200 / 180);
+        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, pulse);
+    }
+}
 /****************************************************************
  * Application
  ****************************************************************/
 int main(void)
 {
-	/**
-	 * Reset of all peripherals, initializes the Flash interface
-	 * and the SysTick.
-	 */
+	/* Reset of all peripherals, initializes the Flash interface and the SysTick.*/
 	HAL_Init();
-
 	/* configure the system clock */
 	SystemClock_Config();
-
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
-
 	MX_TIM2_PWM_Init(); // Initialize PWM for servo
-
-	/* Test: set servo to ~170° position before EtherCAT starts */
-	/* 170° → pulse = 50 + (170 * 200 / 180) = 50 + 188 = 238 ticks (2.38ms) */
-	//__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 238);
-
+	MX_TIM3_100Hz_Init(); // Servo heartbeat
 	/* initialize EtherCAT slave */
 	ecat_slv_init(&config);
 	while (1)
 	{
-		/* run slave logic (polling mode) */
+		// run slave logic (polling mode)
 		ecat_slv();
 	}
 }
