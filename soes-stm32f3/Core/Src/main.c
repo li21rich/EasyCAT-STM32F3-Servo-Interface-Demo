@@ -15,7 +15,7 @@ _Objects Obj;
 TIM_HandleTypeDef htim2; // Timer for servo PWM
 TIM_HandleTypeDef htim3;
 
-volatile uint8_t target_angle = 142;
+volatile uint8_t target_angle = 145;
 volatile float current_angle = 0.0f;
 
 /**
@@ -28,31 +28,15 @@ extern void TXPDO_update(void);
 /* Expose the SOES internal mapping arrays needed for pack/unpack */
 extern _SMmap SMmap2[];
 extern _SMmap SMmap3[];
-
-/**
- * Application hook: runs every ecat_slv() cycle.
- */
-/**
- * Application hook: runs every ecat_slv() cycle.
- */
 static void app_hook(void)
 {
-    /* If the state is OP, we force the update manually */
-    if (ESCvar.ALstatus == ESCop)
-    {
-        /* 1. Manually pull the data from the SM0 buffer (address 0x1000) */
-        // We use the SOES internal RX buffer which pulls from the physical RAM
-        RXPDO_update();
-        COE_pdoUnpack(ESCvar.mbxdata, ESCvar.sm2mappings, SMmap2);
+    // The Master is sending data to Byte 0 (Obj.debug_buffer[0])
+    uint8_t master_val = Obj.debug_buffer[0];
 
-        /* 2. Process data */
-        target_angle = Obj.led[0].state;
-        Obj.echo_byte = target_angle; // Echo it back
-
-        /* 3. Manually push to the SM1 buffer (address 0x1200) */
-        COE_pdoPack(ESCvar.mbxdata, ESCvar.sm3mappings, SMmap3);
-        TXPDO_update();
-    }
+    // The Master is reading from Byte 0 (Obj.debug_buffer[0] or whatever
+    // your TX PDO is mapped to).
+    // Force the echo into the TX buffer:
+    Obj.debug_buffer[0] = master_val;
 }
 /**
  * SOES configuration.
@@ -283,7 +267,33 @@ int main(void)
 	MX_GPIO_Init();
 	MX_TIM2_PWM_Init(); // Initialize PWM for servo
 	MX_TIM3_100Hz_Init(); // Servo heartbeat
-	/* initialize EtherCAT slave */
+    ESCvar.activemb0->cfg_sma = 0x1000; // Mailbox if needed
+    ESCvar.SM[2].PSA = 0x1000;          // Manually force SM2 address
+    ESCvar.SM[3].PSA = 0x1200;          // Manually force SM3 address
+
+    uint16_t val;
+
+        /* SM2 Address: 0x1000 */
+        val = 0x1000;
+        ESC_write(0x804, &val, 2);
+
+        val = 0x0064;
+        ESC_write(0x806, &val, 2);
+
+        /* SM3 Address: 0x1200 */
+        val = 0x1200;
+        ESC_write(0x80C, &val, 2);
+
+        val = 0x0020;
+        ESC_write(0x80E, &val, 2);
+/* Force the LAN9252 to link SM2 to 0x1000 and SM3 to 0x1200 */
+	// These are the "Physical" Start Addresses (PSA)
+	ESC_write(0x804, "\x00\x10", 2); // PSA: 0x1000
+	ESC_write(0x806, "\x64\x00", 2); // Control: 0x0064 (Output, Enable)
+
+	ESC_write(0x80C, "\x00\x12", 2); // PSA: 0x1200
+	ESC_write(0x80E, "\x20\x00", 2); // Control: 0x0020 (Input, Enable)
+
 	ecat_slv_init(&config);
 	while (1)
 	{
