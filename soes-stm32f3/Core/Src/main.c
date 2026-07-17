@@ -19,44 +19,41 @@ volatile uint8_t target_angle = 142;
 volatile float current_angle = 0.0f;
 
 /**
- * Forward declaration of RXPDO_update() from ecat_slv.c.
- * We call this unconditionally to ensure PDO data is always
- * read from the ESC SM2 memory, regardless of ALevent state
- * (the LAN9252 CSR reads can consume ALevent bits before
- * DIG_process checks them).
+ * Forward declarations of PDO update functions.
+ * (COE_pdoUnpack and COE_pdoPack are already defined in esc_coe.h)
  */
 extern void RXPDO_update(void);
 extern void TXPDO_update(void);
 
+/* Expose the SOES internal mapping arrays needed for pack/unpack */
+extern _SMmap SMmap2[];
+extern _SMmap SMmap3[];
+
 /**
  * Application hook: runs every ecat_slv() cycle.
- * Forces PDO read then sets outputs.
+ */
+/**
+ * Application hook: runs every ecat_slv() cycle.
  */
 static void app_hook(void)
 {
-    /* Unconditionally read SM2 process data from ESC into object dictionary.
-     * This bypasses the ALevent-based SM2 detection in DIG_process,
-     * which can miss events on LAN9252 due to CSR ALevent register reads
-     * clearing bits before DIG_process checks them.
-     */
-    RXPDO_update();
+    /* If the state is OP, we force the update manually */
+    if (ESCvar.ALstatus == ESCop)
+    {
+        /* 1. Manually pull the data from the SM0 buffer (address 0x1000) */
+        // We use the SOES internal RX buffer which pulls from the physical RAM
+        RXPDO_update();
+        COE_pdoUnpack(ESCvar.mbxdata, ESCvar.sm2mappings, SMmap2);
 
-    /* Now read the fresh value from object dictionary */
-    target_angle = Obj.led[0].state;
-    if (target_angle > 180) target_angle = 180;
-    Obj.debug_buffer[0] = target_angle;
+        /* 2. Process data */
+        target_angle = Obj.led[0].state;
+        Obj.echo_byte = target_angle; // Echo it back
 
-    /* Echo the received Rx value back so the master can verify the
-     * round-trip over the TxPDO. */
-    Obj.echo_byte = Obj.led[0].state;
-
-    /* Unconditionally pack SM3 process data from object dictionary into the ESC.
-     * This bypasses the App.state gate in DIG_process()'s input section, which
-     * can leave TXPDO_update() skipped (echo stays 0) if the internal
-     * APPSTATE_INPUT flag is not set. Mirrors the RXPDO_update() call above. */
-    TXPDO_update();
+        /* 3. Manually push to the SM1 buffer (address 0x1200) */
+        COE_pdoPack(ESCvar.mbxdata, ESCvar.sm3mappings, SMmap3);
+        TXPDO_update();
+    }
 }
-
 /**
  * SOES configuration.
  * TODO: implement task specific function and specify

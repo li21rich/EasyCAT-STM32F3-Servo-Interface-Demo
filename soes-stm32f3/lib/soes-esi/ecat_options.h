@@ -25,10 +25,10 @@
 #define MBX1_sme_b       MBX1_sma_b+MBX1_sml_b-1
 #define MBX1_smc_b       0x22
 
-#define SM2_sma          0x1000
+#define SM2_sma          0x1400
 #define SM2_smc          0x64
 #define SM2_act          1
-#define SM3_sma          0x1200
+#define SM3_sma          0x1500
 #define SM3_smc          0x20
 #define SM3_act          1
 

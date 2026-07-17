@@ -478,3 +478,4 @@ void ESC_init (const esc_cfg_t * config)
       while (1);
    }
 }
+
