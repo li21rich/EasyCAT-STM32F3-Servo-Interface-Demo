@@ -124,13 +124,16 @@ When unplugging the EasyCAT, first safely eject the virtual USB drive and stop t
 sudo systemctl stop ethercat
 ```
 
-## Other Useful Commands:
+## Commands that helped me:
 ```
-gcc -o master_app master_app.c -lethercat
-ethercat debug 1
-ethercat domains 
+# Compile the master application and link the EtherCAT library
+gcc -o master_app master_app.c -lethercat 
+# Enable debug output for the EtherCAT master (level 1: good, level 2: extremely verbose)
+sudo ethercat debug 1
+sudo ethercat debug 2
+ethercat domains
 dmesg -T | grep EtherCAT | tail -n 250 
-
+dmesg -T | grep 07 | tail -n 100 # Inspect write commands. Especially useful in debug 2 mode.
 ```
 
 ## License

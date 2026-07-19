@@ -1,0 +1,501 @@
+/****************************************************************
+ * Includes
+ ****************************************************************/
+#include "esc_coe.h"
+#include "utypes.h"
+#include <stddef.h>
+
+
+/****************************************************************
+ * Data
+ ****************************************************************/
+static const char acNameDefault[] = "object";
+
+
+/****************************************************************
+ * Object dictionary items
+ ****************************************************************/
+const _objd SDO1000[] =
+{
+  {0x0, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0x00001389, NULL},
+};
+
+const _objd SDO1001[] =
+{
+  {0x0, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 0, &Obj.Error_register},
+};
+
+const _objd SDO1008[] =
+{
+  {0x0, DTYPE_VISIBLE_STRING, 88, ATYPE_RO, acNameDefault, 0, "lan9252_spi"},
+};
+
+const _objd SDO1009[] =
+{
+  {0x0, DTYPE_VISIBLE_STRING, 24, ATYPE_RO, acNameDefault, 0, "1.0"},
+};
+
+const _objd SDO100A[] =
+{
+  {0x0, DTYPE_VISIBLE_STRING, 40, ATYPE_RO, acNameDefault, 0, "3.0.0"},
+};
+
+const _objd SDO1018[] =
+{
+  {0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 4, NULL},
+  {0x01, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0xEE1, NULL},
+  {0x02, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0x00009252, NULL},
+  {0x03, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 1, NULL},
+  {0x04, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 1, NULL},
+};
+
+const _objd SDO10F1[] =
+{
+  {0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 2, NULL},
+  {0x01, DTYPE_UNSIGNED32, 32, ATYPE_RW, acNameDefault, 0, &Obj.ErrorSettings.Local_Error_Reaction},
+  {0x02, DTYPE_UNSIGNED16, 16, ATYPE_RW, acNameDefault, 4, &Obj.ErrorSettings.SyncErrorCounterLimit},
+};
+
+const _objd SDO10F8[] =
+{
+  {0x0, DTYPE_UNSIGNED64, 64, ATYPE_RW, acNameDefault, 0, NULL},
+};
+
+/* RxPDO mapping object 0x1600.
+ * SOES sizeOfPDO() reads each subindex .value as a 16-bit TARGET OBJECT INDEX
+ * (truncated from uint32_t), then iterates that target object's subindices as
+ * the actual (index:subindex:bits) mapping entries. So this object must list
+ * the target object index (0x0005), NOT the full (index:subindex:bits) entries.
+ * One target object (0x0005) with 32 subindices => 32 bytes. */
+const _objd SDO1600[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0x0005, NULL}, // target object 0x0005 (LED RX)
+};
+
+/* TxPDO mapping object 0x1A00.
+ * Same SOES sizeOfPDO() convention as 0x1600: list the 16-bit TARGET OBJECT
+ * INDEX (0x0005), not the full (index:subindex:bits) entries. One target
+ * object (0x0005) with 32 subindices => 32 bytes.
+ * EasyCAT EEPROM uses the same object 0x0005 for both Rx and Tx,
+ * so modifying led[0].state in cb_set_outputs automatically echoes back. */
+const _objd SDO1A00[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0x0005, NULL}, // target object 0x0005 (same as Rx)
+};
+const _objd SDO1C00[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 4, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 2, NULL},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 3, NULL},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 4, NULL},
+};
+
+const _objd SDO1C12[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0x1600, NULL}, //SM2 to RXPDO 0x1600 mapping
+};
+
+const _objd SDO1C13[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0x1A00, NULL}, //SM3 to TXPDO 0x1A00 mapping
+};
+
+const _objd SDO1C32[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 32, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RWpre, acNameDefault, 1, &Obj.Sync_Manager_2_Parameters.Sync_mode},
+	{0x02, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.CycleTime},
+	{0x03, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.ShiftTime},
+	{0x04, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 6, &Obj.Sync_Manager_2_Parameters.Sync_modes_supported},
+	{0x05, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 1000000, &Obj.Sync_Manager_2_Parameters.Minimum_Cycle_Time},
+	{0x06, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Calc_and_Copy_Time},
+	{0x07, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Minimum_Delay_Time},
+	{0x08, DTYPE_UNSIGNED16, 16, ATYPE_RW, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.GetCycleTime},
+	{0x09, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.DelayTime},
+	{0x0A, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Sync0CycleTime},
+	{0x0B, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.SM_event_missed_counter},
+	{0x0C, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.CycleTimeTooSmallCnt},
+	{0x0D, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Shift_too_short_counter},
+	{0x0E, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.RxPDOToggleFailed},
+	{0x0F, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Minimum_Cycle_Distance},
+	{0x10, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Maximum_Cycle_Distance},
+	{0x11, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Minimum_SM_Sync_Distance},
+	{0x12, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.Maximum_SM_Sync_Distance},
+	{0x13, 0, 0},
+	{0x14, 0, 0},
+	{0x15, 0, 0},
+	{0x16, 0, 0},
+	{0x17, 0, 0},
+	{0x18, 0, 0},
+	{0x19, 0, 0},
+	{0x1A, 0, 0},
+	{0x1B, 0, 0},
+	{0x1C, 0, 0},
+	{0x1D, 0, 0},
+	{0x1E, 0, 0},
+	{0x1F, 0, 0},
+	{0x20, DTYPE_BOOLEAN, 1, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_2_Parameters.SyncError},
+};
+
+const _objd SDO1C33[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 32, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RWpre, acNameDefault, 1, &Obj.Sync_Manager_3_Parameters.Sync_mode},
+	{0x02, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.CycleTime},
+	{0x03, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.ShiftTime},
+	{0x04, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 6, &Obj.Sync_Manager_3_Parameters.Sync_modes_supported},
+	{0x05, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 1000000, &Obj.Sync_Manager_3_Parameters.Minimum_Cycle_Time},
+	{0x06, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Calc_and_Copy_Time},
+	{0x07, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Minimum_Delay_Time},
+	{0x08, DTYPE_UNSIGNED16, 16, ATYPE_RW, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.GetCycleTime},
+	{0x09, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.DelayTime},
+	{0x0A, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Sync0CycleTime},
+	{0x0B, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.SM_event_missed_counter},
+	{0x0C, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.CycleTimeTooSmallCnt},
+	{0x0D, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Shift_too_short_counter},
+	{0x0E, DTYPE_UNSIGNED16, 16, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.RxPDOToggleFailed},
+	{0x0F, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Minimum_Cycle_Distance},
+	{0x10, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Maximum_Cycle_Distance},
+	{0x11, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Minimum_SM_Sync_Distance},
+	{0x12, DTYPE_UNSIGNED32, 32, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.Maximum_SM_Sync_Distance},
+	{0x13, 0, 0},
+	{0x14, 0, 0},
+	{0x15, 0, 0},
+	{0x16, 0, 0},
+	{0x17, 0, 0},
+	{0x18, 0, 0},
+	{0x19, 0, 0},
+	{0x1A, 0, 0},
+	{0x1B, 0, 0},
+	{0x1C, 0, 0},
+	{0x1D, 0, 0},
+	{0x1E, 0, 0},
+	{0x1F, 0, 0},
+	{0x20, DTYPE_BOOLEAN, 1, ATYPE_RO, acNameDefault, 0, &Obj.Sync_Manager_3_Parameters.SyncError},
+};
+
+/* TxPDO target object 0x0005 (same as RxPDO target - EasyCAT EEPROM uses
+ * same object for both directions). SOES sizeOfPDO() iterates this object's
+ * subindices and reads each .value as the (index:subindex:bits) mapping entry.
+ * Subindex 1 is led[0].state, which cb_set_outputs modifies to echo back. */
+const _objd SDO6000[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 0x20, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050108, &Obj.led[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050208, &Obj.led[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050308, &Obj.led[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050408, &Obj.led[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050508, &Obj.led[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050608, &Obj.led[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050708, &Obj.led[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050808, &Obj.led[7].state},
+	{0x09, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050908, &Obj.pdo_tx_pad[0]},
+	{0x0A, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050A08, &Obj.pdo_tx_pad[1]},
+	{0x0B, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050B08, &Obj.pdo_tx_pad[2]},
+	{0x0C, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050C08, &Obj.pdo_tx_pad[3]},
+	{0x0D, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050D08, &Obj.pdo_tx_pad[4]},
+	{0x0E, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050E08, &Obj.pdo_tx_pad[5]},
+	{0x0F, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00050F08, &Obj.pdo_tx_pad[6]},
+	{0x10, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051008, &Obj.pdo_tx_pad[7]},
+	{0x11, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051108, &Obj.pdo_tx_pad[8]},
+	{0x12, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051208, &Obj.pdo_tx_pad[9]},
+	{0x13, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051308, &Obj.pdo_tx_pad[10]},
+	{0x14, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051408, &Obj.pdo_tx_pad[11]},
+	{0x15, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051508, &Obj.pdo_tx_pad[12]},
+	{0x16, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051608, &Obj.pdo_tx_pad[13]},
+	{0x17, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051708, &Obj.pdo_tx_pad[14]},
+	{0x18, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051808, &Obj.pdo_tx_pad[15]},
+	{0x19, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051908, &Obj.pdo_tx_pad[16]},
+	{0x1A, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051A08, &Obj.pdo_tx_pad[17]},
+	{0x1B, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051B08, &Obj.pdo_tx_pad[18]},
+	{0x1C, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051C08, &Obj.pdo_tx_pad[19]},
+	{0x1D, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051D08, &Obj.pdo_tx_pad[20]},
+	{0x1E, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051E08, &Obj.pdo_tx_pad[21]},
+	{0x1F, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00051F08, &Obj.pdo_tx_pad[22]},
+	{0x20, DTYPE_UNSIGNED8, 8, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0x00052008, &Obj.pdo_tx_pad[23]}
+};
+
+const _objd SDO6001[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 0x19, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[0].fault_status},
+	{0x02, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[1].fault_status},
+	{0x03, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[2].fault_status},
+	{0x04, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[3].fault_status},
+	{0x05, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[4].fault_status},
+	{0x06, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[5].fault_status},
+	{0x07, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[6].fault_status},
+	{0x08, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[7].fault_status},
+	{0x09, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[8].fault_status},
+	{0x0A, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[9].fault_status},
+	{0x0B, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[10].fault_status},
+	{0x0C, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[11].fault_status},
+	{0x0D, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[12].fault_status},
+	{0x0E, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[13].fault_status},
+	{0x0F, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[14].fault_status},
+	{0x10, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[15].fault_status},
+	{0x11, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[16].fault_status},
+	{0x12, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[17].fault_status},
+	{0x13, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[18].fault_status},
+	{0x14, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[19].fault_status},
+	{0x15, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[20].fault_status},
+	{0x16, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[21].fault_status},
+	{0x17, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[22].fault_status},
+	{0x18, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[23].fault_status},
+	{0x19, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.rtd[24].fault_status}
+};
+
+const _objd SDO6002[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].ax}
+};
+
+const _objd SDO6003[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].ay}
+};
+
+const _objd SDO6004[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].az}
+};
+
+const _objd SDO6005[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].wx}
+};
+
+const _objd SDO6006[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].wy}
+};
+
+const _objd SDO6007[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.imu[0].wz}
+};
+
+const _objd SDO6008[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 4, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.photo[0].millivolts},
+	{0x02, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.photo[1].millivolts},
+	{0x03, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.photo[2].millivolts},
+	{0x04, DTYPE_UNSIGNED16, 16, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.photo[3].millivolts},
+};
+
+const _objd SDO6009[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 2, NULL},
+	{0x01, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.pyro[0].temperature},
+	{0x02, DTYPE_REAL32, 32, ATYPE_RO | ATYPE_TXPDO, acNameDefault, 0, &Obj.pyro[1].temperature}
+};
+
+const _objd SDO600A[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 8, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.led[7].state}
+};
+
+const _objd SDO600B[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 8, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_24V[7].state}
+};
+
+const _objd SDO600C[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 8, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_20V[7].state}
+};
+
+const _objd SDO600D[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 2, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_5V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_TXPDO, acNameDefault, 0, &Obj.power_5V[1].state},
+};
+
+/* RxPDO target object 0x0005.
+ * SOES sizeOfPDO() iterates this object's subindices and reads each .value as
+ * the (index:subindex:bits) mapping entry. So .value MUST be the mapping entry
+ * (0x0005<<16)|(sub<<8)|8, with .data pointing at the actual variable. */
+const _objd SDO0005[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 32, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050108, &Obj.led[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050208, &Obj.led[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050308, &Obj.led[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050408, &Obj.led[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050508, &Obj.led[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050608, &Obj.led[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050708, &Obj.led[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050808, &Obj.led[7].state},
+	{0x09, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050908, &Obj.pdo_rx_pad[0]},
+	{0x0A, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050A08, &Obj.pdo_rx_pad[1]},
+	{0x0B, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050B08, &Obj.pdo_rx_pad[2]},
+	{0x0C, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050C08, &Obj.pdo_rx_pad[3]},
+	{0x0D, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050D08, &Obj.pdo_rx_pad[4]},
+	{0x0E, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050E08, &Obj.pdo_rx_pad[5]},
+	{0x0F, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00050F08, &Obj.pdo_rx_pad[6]},
+	{0x10, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051008, &Obj.pdo_rx_pad[7]},
+	{0x11, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051108, &Obj.pdo_rx_pad[8]},
+	{0x12, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051208, &Obj.pdo_rx_pad[9]},
+	{0x13, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051308, &Obj.pdo_rx_pad[10]},
+	{0x14, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051408, &Obj.pdo_rx_pad[11]},
+	{0x15, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051508, &Obj.pdo_rx_pad[12]},
+	{0x16, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051608, &Obj.pdo_rx_pad[13]},
+	{0x17, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051708, &Obj.pdo_rx_pad[14]},
+	{0x18, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051808, &Obj.pdo_rx_pad[15]},
+	{0x19, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051908, &Obj.pdo_rx_pad[16]},
+	{0x1A, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051A08, &Obj.pdo_rx_pad[17]},
+	{0x1B, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051B08, &Obj.pdo_rx_pad[18]},
+	{0x1C, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051C08, &Obj.pdo_rx_pad[19]},
+	{0x1D, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051D08, &Obj.pdo_rx_pad[20]},
+	{0x1E, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051E08, &Obj.pdo_rx_pad[21]},
+	{0x1F, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00051F08, &Obj.pdo_rx_pad[22]},
+	{0x20, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0x00052008, &Obj.pdo_rx_pad[23]}
+};
+
+const _objd SDO7001[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 8, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_24V[7].state}
+};
+
+const _objd SDO7002[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 8, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[1].state},
+	{0x03, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[2].state},
+	{0x04, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[3].state},
+	{0x05, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[4].state},
+	{0x06, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[5].state},
+	{0x07, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[6].state},
+	{0x08, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_20V[7].state}
+};
+
+const _objd SDO7003[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 2, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_5V[0].state},
+	{0x02, DTYPE_UNSIGNED8, 8, ATYPE_RW | ATYPE_RXPDO, acNameDefault, 0, &Obj.power_5V[1].state},
+};
+
+const _objd SDO8000[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW, acNameDefault, 0, &Obj.rtd_filter},
+};
+
+const _objd SDO8001[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RW, acNameDefault, 0, &Obj.rtd_high_thresh},
+};
+
+const _objd SDO8002[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED16, 16, ATYPE_RW, acNameDefault, 0, &Obj.rtd_low_thresh},
+};
+
+const _objd SDO8003[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW, acNameDefault, 0, &Obj.imu_odr},
+};
+
+const _objd SDO8004[] =
+{
+	{0x00, DTYPE_UNSIGNED8, 8, ATYPE_RO, acNameDefault, 1, NULL},
+	{0x01, DTYPE_UNSIGNED8, 8, ATYPE_RW, acNameDefault, 0, &Obj.imu_full_scale},
+};
+
+
+/****************************************************************
+ * Object dictionary list
+ ****************************************************************/
+
+const _objectlist SDOobjects[] =
+{
+	{0x1000, OTYPE_VAR, 0, 0, "Device Type", SDO1000},
+	{0x1001, OTYPE_VAR, 0, 0, "Error register", SDO1001},
+	{0x1008, OTYPE_VAR, 0, 0, "Device Name", SDO1008},
+	{0x1009, OTYPE_VAR, 0, 0, "Hardware Version", SDO1009},
+	{0x100A, OTYPE_VAR, 0, 0, "Software Version", SDO100A},
+	{0x1018, OTYPE_RECORD, 4, 0, "Identity Object", SDO1018},
+	{0x10F1, OTYPE_RECORD, 2, 0, "ErrorSettings", SDO10F1},
+	{0x10F8, OTYPE_VAR, 0, 0, "Timestamp Object", SDO10F8},
+	{0x1600, OTYPE_RECORD, 32, 0, "0x1600 PDO", SDO1600}, //RxPDO mapping: 32 entries (0x0005:01..20, 8-bit) = 32 bytes
+	{0x1A00, OTYPE_RECORD, 32, 0, "0x1A00 PDO", SDO1A00}, //TxPDO mapping: 32 entries (0x0005:01..20, 8-bit) = 32 bytes
+	{0x1C00, OTYPE_ARRAY, 4, 0, "Sync Manager Communication Type", SDO1C00},
+	{0x1C12, OTYPE_ARRAY, 1, 0, "Sync Manager 2 PDO Assignment", SDO1C12}, //SM2 to RXPDO mapping
+	{0x1C13, OTYPE_ARRAY, 1, 0, "Sync Manager 3 PDO Assignment", SDO1C13}, //SM3 to TXPDO mapping
+	{0x1C32, OTYPE_RECORD, 0x20, 0, "Sync Manager 2 Parameters", SDO1C32},
+	{0x1C33, OTYPE_RECORD, 0x20, 0, "Sync Manager 3 Parameters", SDO1C33},
+	{0x0005, OTYPE_RECORD, 32, 0, "LED state RX", SDO0005}, //LED state RX (32 subindices, matches EEPROM RxPDO 0x1600 32-byte layout)
+	{0x0005, OTYPE_RECORD, 0x20, 0, "LED state TX", SDO6000}, //TxPDO object (32 subindices, same object 0x0005 as Rx)
+	{0x6001, OTYPE_RECORD, 0x19, 0, "RTD fault status", SDO6001}, //RTD fault status
+	{0x6002, OTYPE_RECORD, 1, 0, "IMU ax", SDO6002}, //IMU ax
+	{0x6003, OTYPE_RECORD, 1, 0, "IMU ay", SDO6003}, //IMU ay
+	{0x6004, OTYPE_RECORD, 1, 0, "IMU az", SDO6004}, //IMU az
+	{0x6005, OTYPE_RECORD, 1, 0, "IMU wx", SDO6005}, //IMU wx
+	{0x6006, OTYPE_RECORD, 1, 0, "IMU wy", SDO6006}, //IMU wy
+	{0x6007, OTYPE_RECORD, 1, 0, "IMU wz", SDO6007}, //IMU wz
+	{0x6008, OTYPE_RECORD, 4, 0, "Photo millivolts", SDO6008}, //Photo millivolts
+	{0x6009, OTYPE_RECORD, 2, 0, "Pyro temperature", SDO6009}, //Pyro temperature
+	{0x600A, OTYPE_RECORD, 8, 0, "LED state TX", SDO600A}, //LED state TX
+	{0x600B, OTYPE_RECORD, 8, 0, "Power 24V state TX", SDO600B}, //Power 24V state TX
+	{0x600C, OTYPE_RECORD, 8, 0, "Power 20V state TX", SDO600C}, //Power 20V state TX
+	{0x600D, OTYPE_RECORD, 2, 0, "Power 5V state TX", SDO600D}, //Power 5V state TX
+	{0x7001, OTYPE_RECORD, 8, 0, "Power 24V state RX", SDO7001}, //Power 24V state RX
+	{0x7002, OTYPE_RECORD, 8, 0, "Power 20V state RX", SDO7002}, //Power 20V state RX
+	{0x7003, OTYPE_RECORD, 2, 0, "Power 5V state RX", SDO7003}, //Power 5V state RX
+	{0x8000, OTYPE_RECORD, 1, 0, "RTD 50/60 Hz Filter", SDO8000}, //RTD filter
+	{0x8001, OTYPE_RECORD, 1, 0, "RTD High Threshold", SDO8001}, //RTD High Threshold
+	{0x8002, OTYPE_RECORD, 1, 0, "RTD Low Threshold", SDO8002}, //RTD Low Threshold
+	{0x8003, OTYPE_RECORD, 1, 0, "RTD Data Rate", SDO8003}, //RTD odr
+	{0x8004, OTYPE_RECORD, 1, 0, "RTD Full Scale", SDO8004}, //RTD Resolution
+	{0xffff, 0xff, 0xff, 0xff, NULL, NULL}
+};

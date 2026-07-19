@@ -57,7 +57,7 @@
 /* External variables --------------------------------------------------------*/
 
 /* USER CODE BEGIN EV */
-extern TIM_HandleTypeDef htim3;
+//extern TIM_HandleTypeDef htim3;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -198,10 +198,9 @@ void SysTick_Handler(void)
 /* please refer to the startup file (startup_stm32f3xx.s).                    */
 /******************************************************************************/
 
-/* USER CODE BEGIN 1 */
+/* USER CODE BEGIN 1 *//*
 void TIM3_IRQHandler(void)
 {
-    // This calls your HAL_TIM_PeriodElapsedCallback automatically
     HAL_TIM_IRQHandler(&htim3);
-}
+}*/
 /* USER CODE END 1 */

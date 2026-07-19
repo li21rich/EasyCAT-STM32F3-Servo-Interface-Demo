@@ -96,11 +96,11 @@
 #endif
 
 #ifndef SM2_sma
-#define SM2_sma          0x1100
+#define SM2_sma          0x1000
 #endif
 
 #ifndef SM2_smc
-#define SM2_smc          0x24
+#define SM2_smc          0x64
 #endif
 
 #ifndef SM2_act
@@ -108,7 +108,7 @@
 #endif
 
 #ifndef SM3_sma
-#define SM3_sma          0x1180
+#define SM3_sma          0x1200
 #endif
 
 #ifndef SM3_smc

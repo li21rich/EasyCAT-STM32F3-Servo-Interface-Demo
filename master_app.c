@@ -47,10 +47,10 @@ int main()
         return -1;
     }
 
-    /* 1. Define PDOs to match EasyCAT 32-byte block expectation */
+    /* Reverting to the 1-byte mapping that gave WC=3 */
     ec_pdo_entry_info_t pdo_entries[] = {
-        {0x0005, 0x01, 8}, // Output Byte 0
-        {0x0006, 0x01, 8}  // Input Byte 0
+        {0x0005, 0x01, 8}, // Output Byte 0 (servo angle)
+        {0x0006, 0x01, 8}  // Input Byte 0 (echo)
     };
 
     ec_pdo_info_t pdo_info[] = {
@@ -67,9 +67,10 @@ int main()
     ecrt_slave_config_pdos(sc, EC_END, syncs);
 
     /* 2. Register PDO entries to get memory offsets */
+    // this should not be necessary. remove this:
     off_tx = ecrt_slave_config_reg_pdo_entry(sc, 0x0005, 0x01, domain, NULL);
     off_rx = ecrt_slave_config_reg_pdo_entry(sc, 0x0006, 0x01, domain, NULL);
-
+    
     if (off_tx < 0 || off_rx < 0) {
         fprintf(stderr, "PDO registration failed! off_tx=%d, off_rx=%d\n", off_tx, off_rx);
         return -1;
@@ -91,24 +92,27 @@ int main()
     uint32_t counter = 0;
     uint8_t angle = 180;
 
-    while (running) {
+    while (running && counter < 3001) { // i added auto stop
         ecrt_master_receive(master);
         ecrt_domain_process(domain);
         
-        /* 3. Mandatory DC clock sync for EasyCAT trigger */
-        ecrt_master_sync_slave_clocks(master);
-
-        /* Write command and Read echo */
+        /* Write command */
         domain_pd[off_tx] = angle;
-        uint8_t tx_echo = domain_pd[off_rx-1];
+        
+        /* Read echo */
+        uint8_t tx_echo = domain_pd[off_rx];
 
         if (counter % 500 == 0) {
-            // Add these lines inside the counter % 500 block
-        ec_domain_state_t ds;
-        ecrt_domain_state(domain, &ds);
-        
-        printf("[%u] TX sent=%u | RX echo=%u | WC=%d\n",
-               counter, angle, tx_echo, ds.working_counter);
+            ec_domain_state_t ds;
+            ecrt_domain_state(domain, &ds);
+            
+            printf("[%u] TX sent=%u | RX echo=%u | WC=%d\n",
+                   counter, angle, tx_echo, ds.working_counter);
+            
+            // Debug: print a few bytes around the offsets
+            printf("Domain raw: ");
+            for(int i=0; i<16; i++) printf("%02X ", domain_pd[i]);
+            printf("\n");
         }
 
         angle = (angle >= 180) ? 0 : angle + 1;
